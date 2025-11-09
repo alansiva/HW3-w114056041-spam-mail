@@ -3,6 +3,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Tuple
+import sys
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 import altair as alt
 import numpy as np
@@ -120,6 +124,15 @@ def _top_tokens_by_class(pipeline, top_n: int = 20) -> tuple[pd.DataFrame | None
         return df_ham, df_spam
     except Exception:
         return None, None
+
+def _has_coef(pipeline) -> bool:
+    """回傳分類器是否提供 coef_（若使用校準分類器則取其底層 estimator）。"""
+    try:
+        clf = pipeline.named_steps.get("clf")
+        base = getattr(clf, "estimator", clf)
+        return getattr(base, "coef_", None) is not None
+    except Exception:
+        return False
 
 
 # 單頁介面：移除側欄選單，改為在同一頁連續呈現各區塊
@@ -264,7 +277,7 @@ with st.expander("指標/視覺化", expanded=(nav == "指標/視覺化")):
                     "support": [report[lab]["support"] for lab in labels],
                 }
             )
-            st.dataframe(df_rep, use_container_width=True)
+            st.dataframe(df_rep, width="stretch")
 
             # ROC / PR curves
             st.write("ROC 與 Precision-Recall 曲線")
@@ -305,9 +318,9 @@ with st.expander("指標/視覺化", expanded=(nav == "指標/視覺化")):
             if df_ham is not None and df_spam is not None:
                 cols2 = st.columns(2)
                 with cols2[0]:
-                    st.dataframe(df_ham, use_container_width=True)
+                    st.dataframe(df_ham, width="stretch")
                 with cols2[1]:
-                    st.dataframe(df_spam, use_container_width=True)
+                    st.dataframe(df_spam, width="stretch")
             else:
                 st.info("無法擷取 ham/spam 關鍵字排名（可能不支援或尚未訓練）。")
     st.markdown("[回到頂端](#top)", unsafe_allow_html=True)
@@ -316,15 +329,18 @@ st.markdown("<a id='keywords'></a>", unsafe_allow_html=True)
 with st.expander("關鍵字排行（ham/spam）", expanded=(nav == "關鍵字排行")):
     st.subheader("關鍵字排行（ham/spam）")
     top_n_kw = st.slider("Top-N tokens", min_value=5, max_value=50, value=20, step=5, key="kw_top_n")
-    source = st.radio("來源", options=["模型係數", "訓練資料平均TF-IDF"], index=0, horizontal=True, key="kw_source")
 
     pipeline = _load_pipeline_cached(ARTIFACTS_DIR)
     if pipeline is None:
         st.error("尚未找到已訓練的模型，請先在上方『模型訓練』區塊進行訓練。")
     else:
+        has_coef = _has_coef(pipeline)
+        options_kw = ["模型係數", "訓練資料平均TF-IDF"] if has_coef else ["訓練資料平均TF-IDF"]
+        source = st.radio("來源", options=options_kw, index=0, horizontal=True, key="kw_source")
+
         df_ham_kw = None
         df_spam_kw = None
-        if source == "模型係數":
+        if source == "模型係數" and has_coef:
             df_ham_kw, df_spam_kw = _top_tokens_by_class(pipeline, top_n=int(top_n_kw))
         else:
             metrics_cached = _load_metrics(ARTIFACTS_DIR)
@@ -333,24 +349,26 @@ with st.expander("關鍵字排行（ham/spam）", expanded=(nav == "關鍵字排
             ts = float(metrics_cached.get("test_size", 0.2)) if metrics_cached else 0.2
             rs = int(metrics_cached.get("random_state", 42)) if metrics_cached else 42
             X_train_kw, X_test_kw, y_train_kw, y_test_kw = split_dataset(df_kw, test_size=ts, random_state=rs)
-            df_ham_kw, df_spam_kw = top_tokens_by_class_from_data(pipeline, X_train_kw, y_train_kw, top_n=int(top_n_kw))
+            df_ham_kw, df_spam_kw = top_tokens_by_class_from_data(
+                pipeline, X_train_kw, y_train_kw, top_n=int(top_n_kw)
+            )
 
         if df_ham_kw is not None and df_spam_kw is not None:
             cols_kw = st.columns(2)
             with cols_kw[0]:
                 st.write("Ham Top Tokens")
-                st.dataframe(df_ham_kw, use_container_width=True)
+                st.dataframe(df_ham_kw, width="stretch")
                 st.download_button("下載 ham CSV", data=df_ham_kw.to_csv(index=False), file_name="top_tokens_ham.csv")
             with cols_kw[1]:
                 st.write("Spam Top Tokens")
-                st.dataframe(df_spam_kw, use_container_width=True)
+                st.dataframe(df_spam_kw, width="stretch")
                 st.download_button("下載 spam CSV", data=df_spam_kw.to_csv(index=False), file_name="top_tokens_spam.csv")
 
             # 匯出到 artifacts（若來源為模型係數，直接使用 save_top_tokens_csv；否則以目前結果寫出）
             do_export = st.button("匯出至 artifacts")
             if do_export:
                 try:
-                    if source == "模型係數":
+                    if source == "模型係數" and has_coef:
                         save_top_tokens_csv(pipeline, out_dir=ARTIFACTS_DIR, top_n=int(top_n_kw))
                     else:
                         Path(ARTIFACTS_DIR).mkdir(parents=True, exist_ok=True)
@@ -359,11 +377,7 @@ with st.expander("關鍵字排行（ham/spam）", expanded=(nav == "關鍵字排
                     st.success("已匯出關鍵字排行至 artifacts。")
                 except Exception as e:
                     st.error(f"匯出失敗：{e}")
-        else:
-            if source == "模型係數":
-                st.info("無法透過模型係數擷取關鍵字排行，請改用『訓練資料平均TF-IDF』來源。")
-            else:
-                st.info("無法透過資料備援方式產生關鍵字排行，請確認資料與模型是否完整。")
+        # 若無法產生排行，保持安靜不顯示提示（避免干擾體驗）
     st.markdown("[回到頂端](#top)", unsafe_allow_html=True)
 
 
