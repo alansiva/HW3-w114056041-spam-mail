@@ -277,7 +277,7 @@ with st.expander("指標/視覺化", expanded=(nav == "指標/視覺化")):
                     "support": [report[lab]["support"] for lab in labels],
                 }
             )
-            st.dataframe(df_rep, width="stretch")
+            st.dataframe(df_rep, use_container_width=True)
 
             # ROC / PR curves
             st.write("ROC 與 Precision-Recall 曲線")
@@ -318,9 +318,9 @@ with st.expander("指標/視覺化", expanded=(nav == "指標/視覺化")):
             if df_ham is not None and df_spam is not None:
                 cols2 = st.columns(2)
                 with cols2[0]:
-                    st.dataframe(df_ham, width="stretch")
+                    st.dataframe(df_ham, use_container_width=True)
                 with cols2[1]:
-                    st.dataframe(df_spam, width="stretch")
+                    st.dataframe(df_spam, use_container_width=True)
             else:
                 st.info("無法擷取 ham/spam 關鍵字排名（可能不支援或尚未訓練）。")
     st.markdown("[回到頂端](#top)", unsafe_allow_html=True)
@@ -357,11 +357,11 @@ with st.expander("關鍵字排行（ham/spam）", expanded=(nav == "關鍵字排
             cols_kw = st.columns(2)
             with cols_kw[0]:
                 st.write("Ham Top Tokens")
-                st.dataframe(df_ham_kw, width="stretch")
+                st.dataframe(df_ham_kw, use_container_width=True)
                 st.download_button("下載 ham CSV", data=df_ham_kw.to_csv(index=False), file_name="top_tokens_ham.csv")
             with cols_kw[1]:
                 st.write("Spam Top Tokens")
-                st.dataframe(df_spam_kw, width="stretch")
+                st.dataframe(df_spam_kw, use_container_width=True)
                 st.download_button("下載 spam CSV", data=df_spam_kw.to_csv(index=False), file_name="top_tokens_spam.csv")
 
             # 匯出到 artifacts（若來源為模型係數，直接使用 save_top_tokens_csv；否則以目前結果寫出）
