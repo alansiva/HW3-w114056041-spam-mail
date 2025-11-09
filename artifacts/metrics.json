@@ -1,10 +1,10 @@
 {
-  "accuracy": 0.9829596412556054,
-  "precision_weighted": 0.9832764035822323,
-  "recall_weighted": 0.9829596412556054,
-  "f1_weighted": 0.9830781309076102,
+  "accuracy": 0.9851358277806254,
+  "precision_weighted": 0.9852171707949466,
+  "recall_weighted": 0.9851358277806254,
+  "f1_weighted": 0.9851716944578703,
   "calibrated": true,
-  "random_state": 42,
-  "test_size": 0.2,
-  "max_features": 20000
+  "random_state": 70,
+  "test_size": 0.35,
+  "max_features": 40000
 }
