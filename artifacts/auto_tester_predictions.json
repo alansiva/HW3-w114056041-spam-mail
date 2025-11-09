@@ -1,0 +1,37 @@
+[
+  {
+    "text": "恭喜獲得萬元禮券！立即點擊 https://safe.example.org/verify 領取，限時優惠。",
+    "predicted": "ham",
+    "confidence": 0.9377,
+    "expected_label": "spam",
+    "match": false
+  },
+  {
+    "text": "今天的會議改到 19:00，麻煩更新行程。",
+    "predicted": "ham",
+    "confidence": 0.7396,
+    "expected_label": "ham",
+    "match": true
+  },
+  {
+    "text": "限時贈送 iPhone！撥打 (555) 123-4567 立刻申請。",
+    "predicted": "ham",
+    "confidence": 0.855,
+    "expected_label": "spam",
+    "match": false
+  },
+  {
+    "text": "到家記得跟我說一聲。",
+    "predicted": "ham",
+    "confidence": 0.9821,
+    "expected_label": "ham",
+    "match": true
+  },
+  {
+    "text": "恭喜獲得萬元禮券！立即點擊 https://safe.example.org/verify 領取，限時優惠。",
+    "predicted": "ham",
+    "confidence": 0.9377,
+    "expected_label": "spam",
+    "match": false
+  }
+]

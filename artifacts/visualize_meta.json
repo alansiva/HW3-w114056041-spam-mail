@@ -1,0 +1,15 @@
+{
+  "csv_path": "sms_spam_no_header.csv",
+  "artifacts_dir": "artifacts",
+  "out_dir": "artifacts",
+  "test_size": 0.2,
+  "seed": 42,
+  "top_n": 20,
+  "generated": [
+    "artifacts/roc_curve.png",
+    "artifacts/pr_curve.png",
+    "artifacts/confusion_matrix.png",
+    "artifacts/top_tokens_ham.csv",
+    "artifacts/top_tokens_spam.csv"
+  ]
+}

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import json
 import math
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, List, Dict
 
 import numpy as np
 from joblib import load
@@ -35,12 +36,43 @@ def infer_single(message: str, artifacts_dir: str = "artifacts") -> Tuple[str, f
     return label, confidence
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Infer single message label and confidence")
-    parser.add_argument("message", help="text message to classify")
+def _cli():
+    parser = argparse.ArgumentParser(description="Infer message(s) label and confidence")
+    parser.add_argument("message", nargs="?", help="text message to classify")
     parser.add_argument("--artifacts", default="artifacts", help="artifacts directory")
+    parser.add_argument("--input", default="", help="JSON file of messages: [{text, expected_label?}]")
+    parser.add_argument("--out", default="", help="output JSON path for batch predictions")
     args = parser.parse_args()
 
-    lbl, conf = infer_single(args.message, args.artifacts)
-    print({"label": lbl, "confidence": round(conf, 4)})
+    if args.input:
+        inp_path = Path(args.input)
+        if not inp_path.exists():
+            raise FileNotFoundError(f"Input JSON not found: {inp_path}")
+        items = json.loads(inp_path.read_text())
+        results: List[Dict[str, object]] = []
+        for s in items:
+            txt = s.get("text", "")
+            lbl, conf = infer_single(txt, args.artifacts)
+            res = {
+                "text": txt,
+                "predicted": lbl,
+                "confidence": round(conf, 4),
+            }
+            if "expected_label" in s:
+                res["expected_label"] = s["expected_label"]
+                res["match"] = (s["expected_label"] == lbl)
+            results.append(res)
+        if args.out:
+            Path(args.out).write_text(json.dumps(results, ensure_ascii=False, indent=2))
+            print(f"Saved {len(results)} predictions to {args.out}")
+        else:
+            print(json.dumps(results, ensure_ascii=False, indent=2))
+    else:
+        if not args.message:
+            parser.error("please provide either --input JSON or a single 'message'")
+        lbl, conf = infer_single(args.message, args.artifacts)
+        print({"label": lbl, "confidence": round(conf, 4)})
 
+
+if __name__ == "__main__":
+    _cli()
