@@ -8,7 +8,7 @@ import altair as alt
 import numpy as np
 import pandas as pd
 import streamlit as st
-from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.metrics import classification_report, confusion_matrix, roc_curve, precision_recall_curve
 
 from spam_classification.train import train as train_fn
 from spam_classification.infer import infer_single, load_pipeline
@@ -80,6 +80,31 @@ def _top_features(pipeline, top_n: int = 20) -> pd.DataFrame | None:
         return pd.DataFrame({"feature": feature_names[idx], "weight": weights[idx]})
     except Exception:
         return None
+
+
+def _top_tokens_by_class(pipeline, top_n: int = 20) -> tuple[pd.DataFrame | None, pd.DataFrame | None]:
+    """Return Top-N tokens for ham (negative weights) and spam (positive weights)."""
+    try:
+        tfidf = pipeline.named_steps["tfidf"]
+        feature_names = np.array(tfidf.get_feature_names_out())
+        clf = pipeline.named_steps["clf"]
+        if hasattr(clf, "estimator"):
+            base = clf.estimator
+        else:
+            base = clf
+        coefs = getattr(base, "coef_", None)
+        if coefs is None:
+            return None, None
+        weights = coefs[0] if coefs.ndim == 2 else coefs
+        # spam: largest positive weights
+        spam_idx = np.argsort(weights)[::-1][:top_n]
+        # ham: most negative weights
+        ham_idx = np.argsort(weights)[:top_n]
+        df_spam = pd.DataFrame({"token": feature_names[spam_idx], "weight": weights[spam_idx]})
+        df_ham = pd.DataFrame({"token": feature_names[ham_idx], "weight": weights[ham_idx]})
+        return df_ham, df_spam
+    except Exception:
+        return None, None
 
 
 tab = st.sidebar.radio("選擇功能", ["訓練", "推論", "指標/視覺化", "Artifacts"])
@@ -163,12 +188,49 @@ elif tab == "指標/視覺化":
             )
             st.dataframe(df_rep, use_container_width=True)
 
-            st.write("Top TF-IDF features (by LinearSVC weights)")
-            df_top = _top_features(pipeline, top_n=20)
-            if df_top is not None:
-                st.dataframe(df_top, use_container_width=True)
+            # ROC / PR curves
+            st.write("ROC 與 Precision-Recall 曲線")
+            # positive class is spam -> y_true_binary: 1 for spam, 0 for ham
+            y_true_bin = np.array([1 if y == "spam" else 0 for y in y_test])
+            try:
+                # Use probability if available
+                proba = pipeline.predict_proba(X_test)
+                # Find index for positive class
+                classes = list(pipeline.named_steps["clf"].classes_)
+                pos_idx = classes.index("spam")
+                y_scores = proba[:, pos_idx]
+            except Exception:
+                # Fall back to decision_function
+                try:
+                    y_scores = pipeline.decision_function(X_test)
+                    # normalize to [0,1]
+                    y_scores = 1 / (1 + np.exp(-y_scores))
+                    st.info("模型未校準，ROC/PR 以 decision_function 近似生成。")
+                except Exception:
+                    y_scores = None
+            if y_scores is not None:
+                fpr, tpr, _ = roc_curve(y_true_bin, y_scores)
+                prec, rec, _ = precision_recall_curve(y_true_bin, y_scores)
+                df_roc = pd.DataFrame({"FPR": fpr, "TPR": tpr})
+                df_pr = pd.DataFrame({"Recall": rec, "Precision": prec})
+                roc_chart = alt.Chart(df_roc).mark_line().encode(x="FPR", y="TPR")
+                pr_chart = alt.Chart(df_pr).mark_line().encode(x="Recall", y="Precision")
+                cols = st.columns(2)
+                with cols[0]:
+                    st.altair_chart(roc_chart, use_container_width=True)
+                with cols[1]:
+                    st.altair_chart(pr_chart, use_container_width=True)
+
+            st.write("Top Tokens by Class（ham/spam）")
+            df_ham, df_spam = _top_tokens_by_class(pipeline, top_n=20)
+            if df_ham is not None and df_spam is not None:
+                cols2 = st.columns(2)
+                with cols2[0]:
+                    st.dataframe(df_ham, use_container_width=True)
+                with cols2[1]:
+                    st.dataframe(df_spam, use_container_width=True)
             else:
-                st.info("無法擷取特徵權重（可能不支援或尚未訓練）。")
+                st.info("無法擷取 ham/spam 關鍵字排名（可能不支援或尚未訓練）。")
 
 
 elif tab == "Artifacts":
@@ -186,4 +248,3 @@ elif tab == "Artifacts":
         model = p / "model.joblib"
         if model.exists():
             st.download_button("下載 model.joblib", data=model.read_bytes(), file_name="model.joblib")
-
